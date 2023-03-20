@@ -1,7 +1,9 @@
 import pandas as pd
-# import numpy as np
+import numpy as np
 # import copy
 import itertools
+import time
+import matplotlib.pyplot as plt
 
 import pyAgrum as gum
 # import pyAgrum.lib.dynamicBN as gdyn
@@ -43,7 +45,7 @@ class Bayes_Test:
         return
 
 
-    def learn_dbn(self,structure='hill', parameter='test'):
+    def learn_dbn(self,timesteps=2, structure='hill', parameter='test'):
         discretizer = skbn.BNDiscretizer(defaultDiscretizationMethod='uniform',defaultNumberOfBins=5,discretizationThreshold=25)
         # Create nodes
         template = gum.BayesNet()
@@ -62,6 +64,8 @@ class Bayes_Test:
         for name1 in self.data:
             for name2 in self.data:
                 if int(name1[-1]) > int(name2[-1]):
+                    learner.addForbiddenArc(name1,name2)
+                if int(name1[-1]) + timesteps <= int(name2[-1]):
                     learner.addForbiddenArc(name1,name2)
 
         bn = learner.learnBN()
@@ -82,16 +86,17 @@ class Bayes_Test:
         return self.ClassfromBN.score(xTest, yTest.apply(lambda x: x==1))
 
     
-    def test_bayes(self, cpt_repetitions=5, data_repetitions=10, targets=["c2"]):
+    def time_test(self, timesteps=2, cpt_repetitions=5, data_repetitions=10, targets=["c2"]):
         all_scores = pd.DataFrame(columns=targets)
-        for _ in range(cpt_repetitions):
+        for i in range(cpt_repetitions):
             self.generate_CPTs()
 
             # TODO: WAY TO LOOK AT DIFFERENT CPTs
 
-            for _ in range(data_repetitions):
+            for j in range(data_repetitions):
+                # print(f"Cpt {i + 1} and Data {j + 1}")
                 self.generate_data()
-                bn = self.learn_dbn()
+                bn = self.learn_dbn(timesteps=timesteps)
 
                 scores = {}
                 for target in targets:
@@ -103,8 +108,23 @@ class Bayes_Test:
 
 
 
-bayestest = Bayes_Test()
-all_targets = list(sorted(bayestest.true_dbn.names(), key=lambda x: x[::-1]))
+print("begin")
+start_time = time.time()
 
-print(bayestest.test_bayes(targets=all_targets))
+timesteps = 3
+# nodes = 4
+bayestest = Bayes_Test(timesteps=timesteps) 
+print("Created")
 
+targets = list(sorted(bayestest.true_dbn.names(), key=lambda x: x[::-1]))[-3:]
+
+fig, axs = plt.subplots(1, timesteps)
+
+for timesteps in range(1, timesteps + 1):
+    scores = bayestest.time_test(targets=targets, timesteps=timesteps)
+
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+    axs[timesteps-1].boxplot(scores)
+
+plt.show()

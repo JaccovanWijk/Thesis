@@ -1,5 +1,5 @@
 import pandas as pd
-import numpy as np
+# import numpy as np
 # import copy
 import itertools
 import time
@@ -34,11 +34,24 @@ class Bayes_Test:
             self.true_dbn.addArcs(arcs)
 
         if type=='random':
-            # connect same nodes over time and different nodes within timestep
+            # connect random nodes
             possible_arcs = [arc for arc in list(itertools.combinations(all_nodes,2))]
-            nr_connections = random.randint(0,len(possible_arcs))
+            nr_connections = random.randint(int(0.2*len(possible_arcs)),int(0.8*len(possible_arcs)))
+            arcs = random.choices(possible_arcs, k=nr_connections, replace=False)
             print(f"{nr_connections}/{len(possible_arcs)} random arcs")
-            arcs = random.sample(possible_arcs,nr_connections)
+
+            self.true_dbn.addArcs(arcs)
+
+
+        if type=='close':
+            # connect nodes randomly based on difference in timesteps
+            arcs = []
+            possible_arcs = [arc for arc in list(itertools.combinations(all_nodes,2))]
+            for possible_arc in possible_arcs:
+                rand = random.random()
+                if rand < 1/(6 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2):
+                    # print(rand, 1/(6 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2))
+                    arcs.append(possible_arc)
 
             self.true_dbn.addArcs(arcs)
 
@@ -50,12 +63,10 @@ class Bayes_Test:
         return
 
 
-    def generate_train_data(self,train_items=10000):
+    def generate_data(self,train_items=10000, test_items=1000):
         self.train_data,_=gum.generateSample(self.true_dbn,train_items,None,False)
         self.train_data = self.train_data.reindex(sorted(self.train_data.columns, key=lambda x: x[::-1]), axis=1)
-        return
-    
-    def generate_test_data(self,test_items=10000):
+        
         self.test_data,_=gum.generateSample(self.true_dbn,test_items,None,False)
         self.test_data = self.test_data.reindex(sorted(self.test_data.columns, key=lambda x: x[::-1]), axis=1)
         return
@@ -73,6 +84,10 @@ class Bayes_Test:
         # TODO: More structure and parameter algorithms
         if structure == 'hill':
             learner.useGreedyHillClimbing()
+        if structure == 'tabu':
+            learner.useLocalSearchWithTabuList()
+        if structure == 'k2':
+            learner.useK2([i for i in range(len(self.train_data.columns))])
         if parameter == 'a':
             print("parameter algorithm")
 
@@ -95,31 +110,30 @@ class Bayes_Test:
         return
 
 
-    def score_classifier(self, test_items=1000):
+    def score_classifier(self):
         self.ClassfromBN.fromTrainedModel(self.true_dbn,targetAttribute=self.target)
-        self.generate_test_data(test_items=test_items)
         xTest, yTest = self.test_data.loc[:, self.test_data.columns != self.target], self.test_data[self.target]
         return self.ClassfromBN.score(xTest, yTest.apply(lambda x: x==1))
 
     
-    def time_test(self, timesteps=2, cpt_repetitions=5, data_repetitions=10, targets=["c2"], train_items=10000, test_items=1000):
-        all_scores = pd.DataFrame(columns=targets)
+    def time_test(self, timesteps=2, cpt_repetitions=5, targets=["c2"], train_items=10000, test_items=1000, structure='hill', parameter='test'):
+        all_scores = pd.DataFrame()#columns=targets)
         for i in range(cpt_repetitions):
             self.generate_CPTs()
 
             # TODO: WAY TO LOOK AT DIFFERENT CPTs
 
-            for j in range(data_repetitions):
-                # print(f"Cpt {i + 1} and Data {j + 1}")
-                self.generate_train_data(train_items=train_items)
-                bn = self.learn_dbn(timesteps=timesteps)
+            # for j in range(data_repetitions):
+            # print(f"Cpt {i + 1} and Data {j + 1}")
+            self.generate_data(train_items=train_items, test_items=test_items)
+            bn = self.learn_dbn(timesteps=timesteps, structure=structure, parameter=parameter)
 
-                scores = {}
-                for target in targets:
-                    self.classifier_from_dbn(bn, target)
-                    scores[target] = [self.score_classifier(test_items=test_items)]
-                all_scores = pd.concat([all_scores, pd.DataFrame(scores, index=[f'{i+1}.{j+1    }'])])#, ignore_index=True)
-
+            scores = {}
+            for target in targets:
+                self.classifier_from_dbn(bn, target)
+                scores[f'{target}.{timesteps}'] = [self.score_classifier()]
+            all_scores = pd.concat([all_scores, pd.DataFrame(scores, index=[f't={timesteps}'], )], ignore_index=True)
+            # return all_scores, bn
         return all_scores
 
 if __name__ == '__main__':

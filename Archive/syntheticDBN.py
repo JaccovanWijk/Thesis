@@ -1,5 +1,5 @@
 import pandas as pd
-# import numpy as np
+import numpy as np
 # import copy
 import itertools
 import time
@@ -15,6 +15,8 @@ class Bayes_Test:
     def __init__(self, nodes=4, timesteps=3, type='connected'):
         # Initialize true_dbn
         self.true_dbn = gum.BayesNet()
+        self.nodes = nodes
+        self.timesteps = timesteps
 
         # Create nodes
         all_nodes = []
@@ -49,11 +51,35 @@ class Bayes_Test:
             possible_arcs = [arc for arc in list(itertools.combinations(all_nodes,2))]
             for possible_arc in possible_arcs:
                 rand = random.random()
-                if rand < 1/(6 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2):
-                    # print(rand, 1/(6 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2))
+                if rand < 1/(4 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2):
+                    # print(rand, 1/(4 + (possible_arc[1]//timesteps-possible_arc[0]//timesteps)**2))
                     arcs.append(possible_arc)
 
             self.true_dbn.addArcs(arcs)
+
+        if type=='oc_time':
+            #OC Stands for one causal structure!!!
+            
+            # Add causal arcs
+            arcs = []
+            causal_arcs = [arc for arc in list(itertools.combinations(all_nodes,2)) if arc[1] % nodes != 0 and arc[1] - arc[0] < 2]
+            arcs += causal_arcs
+
+            # Add time arcs (weighted to have more smaller steps)
+            possible_times = [t for t in range(1, timesteps) if (timesteps-1) % t == 0]
+            possible_skips = possible_times[::-1]
+            for node in range(nodes):
+                connections = random.choices(possible_times, k=1, weights=[t for t in possible_times])[0]
+                # print(connections, possible_skips[possible_times.index(connections)])
+                current = node
+                for _ in range(1, connections+1):
+                    time_arc=(current,current + nodes*possible_skips[possible_times.index(connections)])
+                    arcs.append(time_arc)
+                    # print(time_arc)
+                    current = time_arc[1]
+
+            self.true_dbn.addArcs(arcs)
+
 
         return 
 
@@ -100,6 +126,38 @@ class Bayes_Test:
                     learner.addForbiddenArc(name1,name2)
 
         bn = learner.learnBN()
+        return bn
+    
+    def learn_causal_structure(self, structure='hill', parameter='test'):
+
+        one_timestep_data = self.train_data.copy()
+        parts = []
+        for i in range(self.timesteps):
+            part = one_timestep_data.iloc[:,i*self.nodes:i*self.nodes+self.nodes]
+            part.columns = [col[0] for col in part.columns]
+            parts.append(part)
+        train = pd.concat(parts, ignore_index=True)
+
+        discretizer = skbn.BNDiscretizer(defaultDiscretizationMethod='uniform',defaultNumberOfBins=5,discretizationThreshold=25)
+        # Create nodes
+        template = gum.BayesNet()
+        for name in train:
+            template.add(discretizer.createVariable(name, train[name]))
+
+        # Set up learner
+        learner = gum.BNLearner(train, template)
+        # TODO: More structure and parameter algorithms
+        if structure == 'hill':
+            learner.useGreedyHillClimbing()
+        if structure == 'tabu':
+            learner.useLocalSearchWithTabuList()
+        if structure == 'k2':
+            learner.useK2([i for i in range(len(self.train_data.columns))])
+        if parameter == 'a':
+            print("parameter algorithm")
+
+        bn = learner.learnBN()
+        
         return bn
 
 

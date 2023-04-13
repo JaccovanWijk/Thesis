@@ -11,7 +11,7 @@ import pyAgrum.lib.dynamicBN as gdyn
 import pyAgrum.skbn as skbn
 # import pyAgrum.lib.bn_vs_bn as bnvsbn
 
-class Bayes_Test:
+class Generator:
     def __init__(self, nodes=4, timesteps=3, structure='serie', values=2):
         self.nodes = nodes
         self.timesteps = timesteps
@@ -78,15 +78,25 @@ class Bayes_Test:
 
             self.true_dbn=gdyn.unroll2TBN(twodbn,self.timesteps)
 
-        return 
-
+        return
+    
     def generate_data(self,train_items=10000, test_items=1000):
+        self.train_items = train_items
         self.train_data,_=gum.generateSample(self.true_dbn,train_items,None,False)
         self.train_data = self.train_data.reindex(sorted(self.train_data.columns, key=lambda x: x[::-1]), axis=1)
         
+        self.test_items = test_items
         self.test_data,_=gum.generateSample(self.true_dbn,test_items,None,False)
         self.test_data = self.test_data.reindex(sorted(self.test_data.columns, key=lambda x: x[::-1]), axis=1)
         return self.train_data
+
+
+class Bayes_Test:
+    def __init__(self, data, test_data=None):
+        self.data = data
+        
+
+        return 
 
 
     def learn_dbn(self,timesteps=2, structure='hill', parameter='test'):
@@ -119,10 +129,11 @@ class Bayes_Test:
         # bn = learner.learnBN()
         return bn
     
-    def learn_causal_structure(self, structure='hill', parameter='test', t=2):
+    def learn_causal_structure(self, structure='hill', parameter='test', t=2, fold=0):
         # Train on first timestep
         # train = self.train_data.iloc[:,0:self.nodes]
-        train = self.train_data.iloc[:,self.nodes*t:self.nodes+self.nodes*t]
+        fold_items = int(np.floor(self.train_items/self.folds))
+        train = self.train_data.iloc[fold_items*fold:fold_items+fold_items*fold,self.nodes*t:self.nodes+self.nodes*t]
         train.columns = [col[0] for col in train.columns]
 
         discretizer = skbn.BNDiscretizer(defaultDiscretizationMethod='uniform',defaultNumberOfBins=5,discretizationThreshold=25)

@@ -1,3 +1,4 @@
 
 .ipynb_checkpoints/SyntheticTest-checkpoint.ipynb
 __pycache__/syntheticDBN.cpython-39.pyc
+*.pyc

@@ -26,10 +26,12 @@ class Generator:
         # Create nodes
         all_nodes = []
         all_names = []
-        # TODO: if nodes > 26
+
+        names = [f"{chr(ord('`')+(x%26 + 1))}"*(np.ceil((x+1)/26).astype(int)) for x in range(self.nodes)]
+        # print(names)
         for t in ['0','t']:
             for i in range(self.nodes):
-                name = f"{chr(ord('`')+i+1)}{t}"
+                name = names[i]+t
                 all_names.append(name)
                 all_nodes.append(twodbn.add(gum.LabelizedVariable(name,name,values)))
 
@@ -47,43 +49,13 @@ class Generator:
 
             self.true_dbn=gdyn.unroll2TBN(twodbn,self.timesteps)
 
-
-        if structure=='diamond':
-            #OC Stands for one causal structure!!!
-
-            arcs = []
-
-            for i in range(2):
-                parents = 1
-                iterations = 0
-                for node in range(self.nodes):
-                    # Add left connection
-                    if node+parents < self.nodes:
-                        arcs.append((node+i*self.nodes, node+parents+i*self.nodes)) 
-                    # Add right connection
-                    if node+parents+1 < self.nodes:
-                        arcs.append((node+i*self.nodes, node+parents+1+i*self.nodes))
-                    
-                    iterations += 1
-                    if iterations == parents:
-                        parents += 1
-                        iterations = 0
-            
-            for node in range(self.nodes):
-                arcs.append((node, node+self.nodes))
-
-            twodbn.addArcs(arcs)
-
-            twodbn.generateCPTs()
-
-            self.true_dbn=gdyn.unroll2TBN(twodbn,self.timesteps)
-
         return
     
     def generate_data(self,train_items=10000, test_items=1000):
         self.train_items = train_items
         self.train_data,_=gum.generateSample(self.true_dbn,train_items,None,False)
-        self.train_data = self.train_data.reindex(sorted(self.train_data.columns, key=lambda x: x[::-1]), axis=1)
+        self.train_data = self.train_data.reindex(sorted(self.train_data.columns, key=lambda x: (len(x), x[::-1], x[-1])), axis=1)
+        self.train_data = self.train_data.astype('int')
         
         self.test_items = test_items
         self.test_data,_=gum.generateSample(self.true_dbn,test_items,None,False)
